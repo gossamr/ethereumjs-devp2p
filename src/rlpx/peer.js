@@ -172,7 +172,7 @@ class Peer extends EventEmitter {
 
         const msgCode = code - obj.offset
         const prefix = this.getMsgPrefix(msgCode)
-        console.log(`Received ${prefix} (message code: ${code} - ${obj.offset} = ${msgCode}) ${this._socket.remoteAddress}:${this._socket.remotePort}`)
+        debug(`Received ${prefix} (message code: ${code} - ${obj.offset} = ${msgCode}) ${this._socket.remoteAddress}:${this._socket.remotePort}`)
 
         try {
           obj.protocol._handleMessage(msgCode, body.slice(1))

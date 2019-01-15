@@ -65,7 +65,7 @@ includes node discovery ([./src/dpt/server.js](./src/dpt/server.js))
 
 ## Branches
 - [master](https://github.com/ethereumjs/ethereumjs-devp2p)
-- [discovery-v5](https://github.com/tcsiwula/ethereumjs-devp2p/tree/discovery-v5) (wip)
+- [discovery-v5](https://github.com/ethereumjs/ethereumjs-devp2p/tree/discovery-v5) (wip)
 - [discv4-enr-extension-support](https://github.com/tcsiwula/ethereumjs-devp2p/tree/discv4-enr-extension-support) (wip)
 - [les](https://github.com/ethereumjs/ethereumjs-devp2p) (todo)
 
@@ -75,7 +75,7 @@ includes node discovery ([./src/dpt/server.js](./src/dpt/server.js))
 Node discovery v5 (dscv5) support is turned off by default.
 
 It is currently in development on this branch:
-[github.com/tcsiwula/ethereumjs-devp2p/tree/discovery-v5](https://github.com/tcsiwula/ethereumjs-devp2p/tree/discovery-v5).
+[github.com/ethereumjs/ethereumjs-devp2p/tree/discovery-v5](https://github.com/ethereumjs/ethereumjs-devp2p/tree/discovery-v5).
 
 #### Running node discovery v5
 
@@ -85,7 +85,7 @@ Run the following:
 ```
 npm install
 npm run build
-npm run v5
+npm run v5-peer
 ```
 
 or:
