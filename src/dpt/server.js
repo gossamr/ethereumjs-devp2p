@@ -7,6 +7,8 @@ const message = require('./message')
 const { keccak256, pk2id, createDeferred, v4, v5 } = require('../util')
 const chalk = require('chalk')
 const debug = createDebugLogger('devp2p:dpt:server')
+const logPing = createDebugLogger('devp2p:dpt:server:ping')
+const logNeighbors = createDebugLogger('devp2p:dpt:server:neighbors')
 
 const createSocketUDP4 = dgram.createSocket.bind(null, 'udp4')
 
@@ -149,11 +151,6 @@ class Server extends EventEmitter {
   _handler (msg, rinfo) {
     const info = message.decode(msg)
     const peerId = pk2id(info.publicKey)
-    debug(
-      `received ${info.typename} from ${rinfo.address}:${
-        rinfo.port
-      } (peerId: ${peerId.toString('hex')})`
-    )
 
     // add peer if not in our table
     const peer = this._dpt.getPeer(peerId)
@@ -167,6 +164,8 @@ class Server extends EventEmitter {
 
     switch (info.typename) {
       case 'ping':
+        logPing(`received ${info.typename} from ${rinfo.address}:${rinfo.port
+          } (peerId: ${peerId.toString('hex')})`)
         Object.assign(rinfo, { id: peerId, udpPort: rinfo.port })
         this._send(rinfo, 'pong', {
           to: {
@@ -179,6 +178,8 @@ class Server extends EventEmitter {
         break
 
       case 'pong':
+        logPing(`received ${info.typename} from ${rinfo.address}:${rinfo.port
+          } (peerId: ${peerId.toString('hex')})`)
         var rkey = info.data.hash.toString('hex')
         const rkeyParity = this._parityRequestMap.get(rkey)
         if (rkeyParity) {
@@ -198,6 +199,8 @@ class Server extends EventEmitter {
         break
 
       case 'findneighbours':
+        logNeighbors(`received ${info.typename} from ${rinfo.address}:${rinfo.port
+          } (peerId: ${peerId.toString('hex')})`)
         Object.assign(rinfo, { id: peerId, udpPort: rinfo.port })
         this._send(rinfo, 'neighbours', {
           peers: this._dpt.getClosestPeers(info.data.id)
@@ -205,7 +208,10 @@ class Server extends EventEmitter {
         break
 
       case 'neighbours':
-        this.emit('peers', info.data.peers.map(peer => peer.endpoint))
+        logNeighbors(`received ${info.typename} from ${rinfo.address}:${rinfo.port
+          } (peerId: ${peerId.toString('hex')})`)
+        this.emit('peers', info.data.peers.map(peer => peer.endpoint));
+        this.emit('neighbors', { peer: { address: rinfo.address, port: rinfo.port, id: peerId }, neighbors: info.data.peers })
         break
     }
   }
