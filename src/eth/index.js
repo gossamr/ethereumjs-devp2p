@@ -97,6 +97,13 @@ class ETH extends EventEmitter {
     if (this._status === null || this._peerStatus === null) return
     clearTimeout(this._statusTimeoutId)
 
+    this.emit('status_precheck', {
+      networkId: this._peerStatus[1],
+      td: Buffer.from(this._peerStatus[2]),
+      bestHash: Buffer.from(this._peerStatus[3]),
+      genesisHash: Buffer.from(this._peerStatus[4])
+    })
+
     assertEq(this._status[0], this._peerStatus[0], 'Protocol version mismatch')
     assertEq(this._status[1], this._peerStatus[1], 'NetworkId mismatch')
     assertEq(this._status[4], this._peerStatus[4], 'Genesis block mismatch')
