@@ -32,7 +32,7 @@ class RLPx extends EventEmitter {
     if (this._dpt !== null) {
       this._dpt.on('peer:new', (peer) => {
         if (!peer.tcpPort) {
-          this._dpt.banPeer(peer, ms('5m'))
+          this._dpt.banPeer(peer, ms('24h'))
           debug(`banning peer with missing tcp port: ${peer.address}`)
           return
         }
@@ -136,7 +136,7 @@ class RLPx extends EventEmitter {
     this.connect(opts).catch((err) => {
       if (this._dpt === null) return
       if (err.code === 'ECONNRESET' || err.toString().includes('Connection timeout')) {
-        this._dpt.banPeer(opts, ms('5m'))
+        this._dpt.banPeer(opts, ms('1h'))
       }
     })
   }

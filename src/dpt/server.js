@@ -165,7 +165,7 @@ class Server extends EventEmitter {
     switch (info.typename) {
       case 'ping':
         logPing(`received ${info.typename} from ${rinfo.address}:${rinfo.port
-          } (peerId: ${peerId.toString('hex')})`)
+        } (peerId: ${peerId.toString('hex')})`)
         Object.assign(rinfo, { id: peerId, udpPort: rinfo.port })
         this._send(rinfo, 'pong', {
           to: {
@@ -179,7 +179,7 @@ class Server extends EventEmitter {
 
       case 'pong':
         logPing(`received ${info.typename} from ${rinfo.address}:${rinfo.port
-          } (peerId: ${peerId.toString('hex')})`)
+        } (peerId: ${peerId.toString('hex')})`)
         var rkey = info.data.hash.toString('hex')
         const rkeyParity = this._parityRequestMap.get(rkey)
         if (rkeyParity) {
@@ -200,7 +200,7 @@ class Server extends EventEmitter {
 
       case 'findneighbours':
         logNeighbors(`received ${info.typename} from ${rinfo.address}:${rinfo.port
-          } (peerId: ${peerId.toString('hex')})`)
+        } (peerId: ${peerId.toString('hex')})`)
         Object.assign(rinfo, { id: peerId, udpPort: rinfo.port })
         this._send(rinfo, 'neighbours', {
           peers: this._dpt.getClosestPeers(info.data.id)
@@ -209,8 +209,8 @@ class Server extends EventEmitter {
 
       case 'neighbours':
         logNeighbors(`received ${info.typename} from ${rinfo.address}:${rinfo.port
-          } (peerId: ${peerId.toString('hex')})`)
-        this.emit('peers', info.data.peers.map(peer => peer.endpoint));
+        } (peerId: ${peerId.toString('hex')})`)
+        this.emit('peers', info.data.peers.map(peer => peer.endpoint))
         this.emit('neighbors', { peer: { address: rinfo.address, port: rinfo.port, id: peerId }, neighbors: info.data.peers })
         break
     }

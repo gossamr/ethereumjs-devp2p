@@ -6,7 +6,7 @@ const debug = createDebugLogger('devp2p:dpt:ban-list')
 
 class BanList {
   constructor () {
-    this._lru = new LRUCache({ max: 30000 }) // 10k should be enough (each peer obj can has 3 keys)
+    this._lru = new LRUCache({ max: 300000 }) // 100k should be enough (each peer obj can has 3 keys)
   }
 
   add (obj, maxAge) {
