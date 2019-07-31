@@ -7,6 +7,11 @@ const rlp = require('rlp-encoding')
 const secp256k1 = require('secp256k1')
 const Buffer = require('safe-buffer').Buffer
 const { keccak256, int2buffer, buffer2int, assertEq } = require('../util')
+const { hexToDec } = require('hex2dec')
+const base64url = require('base64url')
+const createDebugLogger = require('debug')
+
+const debug = createDebugLogger('devp2p:dpt:message')
 
 function getTimestamp () {
   return (Date.now() / 1000) | 0
@@ -19,7 +24,9 @@ const timestamp = {
     return buffer
   },
   decode: function (buffer) {
-    if (buffer.length !== 4) {
+    if (buffer.length > 4) {
+      return (hexToDec(buffer.toString('hex')) / 1000) | 0
+    } else if (buffer.length < 4) {
       throw new RangeError(
         `Invalid timestamp buffer :${buffer.toString('hex')}`
       )
@@ -76,13 +83,118 @@ const endpoint = {
   }
 }
 
+const extra = {
+  decode: function (payload) {
+    // debug(payload)
+    var res
+    if (typeof payload === 'object') {
+      switch (payload.constructor.name) {
+        case 'Buffer':
+          res = payload.toString('hex')
+          break
+        case 'Array':
+          if (payload[0].constructor.name === 'Array') {
+            if (payload[0][1]) {
+              if (payload[0][1].toString() === '') {
+                // eth
+                res = [ payload[0].map(ele => ele.toString('hex')) ]
+              } else {
+                // cap
+                res = payload.map(x => [ x[0].toString(), hexToDec(x[1].toString('hex')) ] )
+              }
+            } else {
+              debug(payload[0])
+            }
+          } else {
+            res = payload.map(ele => ele.toString('hex'))
+          }
+          break
+        default:
+      }
+    } else {
+      res = payload
+    }
+    return res
+  }
+}
+
+const enr = {
+  encode: function (obj) {
+    /*
+      content   = rlp.encode([seq, k, v, ...])
+      signature = sign(content)
+      record    = rlp.encode([signature, seq, k, v, ...])
+    */
+    var content = [obj.content.seq, 'eth', [ obj.content.forkid ] , 'id', obj.content.id]
+    if (obj.content.id == 'v4') {
+      content = content.concat(['ip', address.encode(obj.ip), 'secp256k1', obj.secp256k1, 'udp', port.encode(obj.udp)])
+    } else {
+      // deal with other possible ID schemes in the future
+    }
+    const sighash = keccak256(rlp.encode(content))
+    const sig = secp256k1.sign(sighash, obj.privateKey)
+    const record = [sig.signature, ...content]
+    return record
+  },
+  decode: function (payload) {
+    if (payload.length > 300) {
+      throw new RangeError(`ENR record too large. Maximum record size is 300`)
+    }
+    const signature = payload[0]
+    const content = rlp.encode(payload.slice(1))
+    const seq = payload[1]
+    const pairs = payload.slice(2).reduce((acc, ele, i, arr) => {
+      if (i % 2 === 0) {
+        acc[ele] = arr[i+1]
+      }
+      return acc
+    }, {})
+
+    // confirm v4 ID scheme
+    if (!pairs.id) {
+      throw new Error(`Invalid ENR, no identity scheme provided`)
+    }
+    const id = Buffer.from(pairs.id).toString()
+
+    if (id == 'v4') {
+      debug('ENR uses v4 identity scheme. Verifying...')
+
+      if (secp256k1.verify(keccak256(content), signature, pairs.secp256k1)) {
+        debug('Verified ENR successfully. Parsing...')
+        var record = {
+          id: id,
+          secp256k1: pairs.secp256k1.toString('hex')
+        }
+        pairs.ip ? Object.assign(record, {ip: address.decode(pairs.ip) }) : debug('ENR Decoding: No "ip" field found in ENR')
+        pairs.udp ? Object.assign(record, {udp: port.decode(pairs.udp) }) : debug('ENR Decoding: No "udp" field found in ENR')
+        pairs.tcp ? Object.assign(record, {tcp: port.decode(pairs.tcp) }) : debug('ENR Decoding: No "tcp" field found in ENR')
+        pairs.cap ? Object.assign(record, {cap: extra.decode(pairs.cap) }) : debug('ENR Decoding: No "cap" field found in ENR')
+        pairs.eth ? Object.assign(record, {eth: extra.decode(pairs.eth) }) : debug('ENR Decoding: No "eth" field found in ENR')
+
+        return {
+          record: record,
+          pairs: pairs
+        }
+      }
+    } else {
+      throw new Error(`Unrecognized identity scheme provided: ${id}`)
+    }
+
+    return {
+      record: payload,
+      pairs: pairs
+    }
+  }
+}
+
 const ping = {
   encode: function (obj) {
     return [
       int2buffer(obj.version),
       endpoint.encode(obj.from),
       endpoint.encode(obj.to),
-      timestamp.encode(obj.timestamp)
+      timestamp.encode(obj.timestamp),
+      obj.seq
     ]
 
     // message = _pack(CMD_PING.id, payload, self.privkey)
@@ -95,25 +207,27 @@ const ping = {
       version: buffer2int(payload[0]),
       from: endpoint.decode(payload[1]),
       to: endpoint.decode(payload[2]),
-      timestamp: timestamp.decode(payload[3])
+      timestamp: timestamp.decode(payload[3]),
+      seq: payload[4]
     }
   }
 }
 
 const pong = {
   encode: function (obj) {
-    return [endpoint.encode(obj.to), obj.hash, timestamp.encode(obj.timestamp)]
+    return [endpoint.encode(obj.to), obj.hash, timestamp.encode(obj.timestamp), obj.seq]
   },
   decode: function (payload) {
     return {
       to: endpoint.decode(payload[0]),
       hash: payload[1],
-      timestamp: timestamp.decode(payload[2])
+      timestamp: timestamp.decode(payload[2]),
+      seq: payload[3]
     }
   }
 }
 
-const findneighbours = {
+const findneighbors = {
   encode: function (obj) {
     return [obj.id, timestamp.encode(obj.timestamp)]
   },
@@ -125,7 +239,7 @@ const findneighbours = {
   }
 }
 
-const neighbours = {
+const neighbors = {
   encode: function (obj) {
     return [
       obj.peers.map(peer => endpoint.encode(peer).concat(peer.id)),
@@ -142,20 +256,54 @@ const neighbours = {
   }
 }
 
-const messages = { ping, pong, findneighbours, neighbours }
+const enrRequest = {
+  encode: function (obj) {
+    const expiration = timestamp.encode(obj.timestamp)
+    // debug(`Encoding ENR request: ${timestamp.decode(expiration)}`)
+    return [expiration]
+  },
+  decode: function (payload) {
+    const expiration = timestamp.decode(payload[0])
+    // debug(`Decoding ENR request: ${expiration}`)
+    return { timestamp: expiration }
+  }
+}
+
+const enrResponse = {
+  encode: function (obj) {
+    debug(`Encoding ENR response with hash ${obj.hash.toString('hex')}:`)
+    const record = enr.encode(obj.enr)
+    debug(`Produced enr:${base64url(rlp.encode(record))}`)
+    const res = [obj.hash, record]
+    return res
+  },
+  decode: function (payload) {
+    debug(`Decoding ENR response with hash ${payload[0].toString('hex')}`)
+    return {
+      hash: payload[0],
+      enr: enr.decode(payload[1])
+    }
+  }
+}
+
+const messages = { ping, pong, findneighbors, neighbors, enrRequest, enrResponse }
 
 const types = {
   byName: {
     ping: 0x01,
     pong: 0x02,
-    findneighbours: 0x03,
-    neighbours: 0x04
+    findneighbors: 0x03,
+    neighbors: 0x04,
+    enrRequest: 0x05,
+    enrResponse: 0x06
   },
   byType: {
     0x01: 'ping',
     0x02: 'pong',
-    0x03: 'findneighbours',
-    0x04: 'neighbours'
+    0x03: 'findneighbors',
+    0x04: 'neighbors',
+    0x05: 'enrRequest',
+    0x06: 'enrResponse'
   }
 }
 

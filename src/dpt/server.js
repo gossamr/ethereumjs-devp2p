@@ -3,14 +3,22 @@ const dgram = require('dgram')
 const ms = require('ms')
 const createDebugLogger = require('debug')
 const LRUCache = require('lru-cache')
+const Buffer = require('safe-buffer').Buffer
 const message = require('./message')
+const secp256k1 = require('secp256k1')
 const { keccak256, pk2id, createDeferred, v4, v5 } = require('../util')
 const chalk = require('chalk')
+const sleep = require('util').promisify(setTimeout);
+
 const debug = createDebugLogger('devp2p:dpt:server')
 const logPing = createDebugLogger('devp2p:dpt:server:ping')
 const logNeighbors = createDebugLogger('devp2p:dpt:server:neighbors')
+const logENR = createDebugLogger('devp2p:dpt:server:enr')
+const logError = createDebugLogger('devp2p:dpt:server:error')
+const logBond = createDebugLogger('devp2p:dpt:server:bond')
 
 const createSocketUDP4 = dgram.createSocket.bind(null, 'udp4')
+
 
 class Server extends EventEmitter {
   constructor (dpt, privateKey, options) {
@@ -18,18 +26,29 @@ class Server extends EventEmitter {
 
     this._dpt = dpt
     this._privateKey = privateKey
+    this._pubKey = secp256k1.publicKeyCreate(privateKey)
+    this._enrSequence = Buffer.from('01', 'hex')
 
-    if (options.version === '5') {
-      this._version = v5
-    } else {
-      this._version = v4
-    }
+    // Main net St. Petersburg. TODO update next fork
+    const forkid = (options.forkid) ? options.forkid : '668db0af'
+    this._forkid = [ Buffer.from(forkid,'hex'), Buffer.from('') ]
 
-    console.log(
-      chalk.green(
-        `Starting node discovery protocol with version: ${this._version}`
-      )
-    )
+    this._version = (options.version === '5') ? v5 : v4
+
+    console.log(chalk.green(`Starting node discovery protocol with version ${
+      this._version} at enode://${
+      Buffer.from(pk2id(this._pubKey)).toString('hex')}@${
+      options.endpoint.address}:${options.endpoint.udpPort}`))
+
+    this._lastPongReceived = new LRUCache({
+      maxAge: ms('1d'),
+      stale: false
+    })
+
+    this._lastPingReceived = new LRUCache({
+      maxAge: ms('1d'),
+      stale: false
+    })
 
     this._timeout = options.timeout || ms('10s')
     this._endpoint = options.endpoint || {
@@ -78,14 +97,16 @@ class Server extends EventEmitter {
   async ping (peer) {
     this._isAliveCheck()
 
-    const rckey = `${peer.address}:${peer.udpPort}`
+    // prevent dupe requests within 1 sec
+    const rckey = `ping:${peer.address}:${peer.udpPort}`
     const promise = this._requestsCache.get(rckey)
     if (promise !== undefined) return promise
 
     const hash = this._send(peer, 'ping', {
       version: this._version,
       from: this._endpoint,
-      to: peer
+      to: peer,
+      seq: this._enrSequence
     })
 
     const deferred = createDeferred()
@@ -96,14 +117,10 @@ class Server extends EventEmitter {
       deferred,
       timeoutId: setTimeout(() => {
         if (this._requests.get(rkey) !== undefined) {
-          debug(
-            `ping timeout: ${peer.address}:${peer.udpPort} ${peer.id &&
-              peer.id.toString('hex')}`
-          )
+          logError(chalk.red(`ping timeout: ${peer.address}:${peer.udpPort} ${
+            peer.id && peer.id.toString('hex')}`))
           this._requests.delete(rkey)
-          deferred.reject(
-            new Error(`Timeout error: ping ${peer.address}:${peer.udpPort}`)
-          )
+          deferred.reject(new Error(`Timeout error: ping ${peer.address}:${peer.udpPort}`))
         } else {
           return deferred.promise
         }
@@ -114,8 +131,10 @@ class Server extends EventEmitter {
     return deferred.promise
   }
 
-  findneighbours (peer, id) {
+  async findneighbours (peer, id) {
     this._isAliveCheck()
+    await this._ensureBond(peer)
+
     this._send(peer, 'findneighbours', { id })
   }
 
@@ -123,11 +142,70 @@ class Server extends EventEmitter {
     if (this._socket === null) throw new Error('Server already destroyed')
   }
 
+  _checkBond (peer) {
+    if (peer) {
+      const lprkey = `${peer.id.toString('hex')}@${peer.address}:${peer.udpPort}`
+      return this._lastPongReceived.get(lprkey)
+    } else {
+      return false
+    }
+  }
+
+  async _ensureBond (peer) {
+    const lprkey = `${peer.id.toString('hex')}@${peer.address}:${peer.udpPort}`
+    if (!this._lastPingReceived.get(lprkey)) {
+      logBond(`Bonding with enode://${lprkey}`)
+      await this.ping(peer)
+      await sleep(ms('500ms')) // wait for ping back and pong process
+    }
+  }
+
+  async requestENR (obj) {
+    this._isAliveCheck()
+
+    // prevent dupe requests within 1 sec
+    const rckey = `enr:${obj.address}:${obj.udpPort}`
+    const promise = this._requestsCache.get(rckey)
+    if (promise !== undefined) return promise
+
+    const deferred = createDeferred()
+
+    const peer = this._dpt.getPeer(obj)
+    await this._ensureBond(peer)
+
+    if (peer === null) {
+      debug(`Peer not yet bonded: enrRequest ${obj.address}:${obj.udpPort} ${
+        obj.id && obj.id.toString('hex')}`)
+      deferred.reject(new Error(`Peer not yet bonded: enrRequest ${obj.address}:${obj.udpPort}`))
+    } else {
+      const hash = this._send(peer, 'enrRequest', {}) // just send an expiration timestamp
+      const rkey = hash.toString('hex')
+
+      // reject
+      this._requests.set(rkey, {
+        peer,
+        deferred,
+        timeoutId: setTimeout(() => {
+          if (this._requests.get(rkey) !== undefined) {
+            logError(chalk.red(`enrRequest timeout: ${peer.address}:${peer.udpPort} ${
+              peer.id && peer.id.toString('hex')}`))
+            this._requests.delete(rkey)
+            deferred.reject(new Error(`Timeout error: enrRequest ${
+              peer.address}:${peer.udpPort}`))
+          } else {
+            return deferred.promise
+          }
+        }, this._timeout)
+      })
+    }
+
+    this._requestsCache.set(rckey, deferred.promise)
+    return deferred.promise
+  }
+
   _send (peer, typename, data) {
-    debug(
-      `send ${typename} to ${peer.address}:${peer.udpPort} (peerId: ${peer.id &&
-        peer.id.toString('hex')})`
-    )
+    debug(`send ${typename} to ${peer.address}:${peer.udpPort} (peerId: ${
+      peer.id && peer.id.toString('hex')})`)
 
     const msg = message.encode(typename, data, this._privateKey)
     // Parity hack
@@ -162,45 +240,55 @@ class Server extends EventEmitter {
       setTimeout(() => this.emit('peers', [info.data.from]), ms('100ms'))
     }
 
+    const lprkey = `${peerId.toString('hex')}@${rinfo.address}:${rinfo.port}`
+
     switch (info.typename) {
       case 'ping':
         logPing(`received ${info.typename} from ${rinfo.address}:${rinfo.port
-        } (peerId: ${peerId.toString('hex')})`)
+          } (peerId: ${peerId.toString('hex')})`)
         Object.assign(rinfo, { id: peerId, udpPort: rinfo.port })
+
         this._send(rinfo, 'pong', {
           to: {
             address: rinfo.address,
             udpPort: rinfo.port,
             tcpPort: info.data.from.tcpPort
           },
-          hash: msg.slice(0, 32)
+          hash: msg.slice(0, 32),
+          seq: this._enrSequence
         })
+
+        this._lastPingReceived.set(lprkey, true)
         break
 
       case 'pong':
         logPing(`received ${info.typename} from ${rinfo.address}:${rinfo.port
-        } (peerId: ${peerId.toString('hex')})`)
+          } (peerId: ${peerId.toString('hex')})`)
         var rkey = info.data.hash.toString('hex')
         const rkeyParity = this._parityRequestMap.get(rkey)
         if (rkeyParity) {
           rkey = rkeyParity
           this._parityRequestMap.delete(rkeyParity)
         }
-        const request = this._requests.get(rkey)
-        if (request) {
+        const pongReq = this._requests.get(rkey)
+        if (pongReq) {
           this._requests.delete(rkey)
-          request.deferred.resolve({
+          pongReq.deferred.resolve({
             id: peerId,
-            address: request.peer.address,
-            udpPort: request.peer.udpPort,
-            tcpPort: request.peer.tcpPort
+            address: pongReq.peer.address,
+            udpPort: pongReq.peer.udpPort,
+            tcpPort: pongReq.peer.tcpPort
           })
         }
+
+        this._lastPongReceived.set(lprkey, true)
+
         break
 
       case 'findneighbours':
-        logNeighbors(`received ${info.typename} from ${rinfo.address}:${rinfo.port
-        } (peerId: ${peerId.toString('hex')})`)
+        this._checkBond(peer)
+        logNeighbors(`received ${info.typename} from ${rinfo.address}:${
+          rinfo.port} (peerId: ${peerId.toString('hex')})`)
         Object.assign(rinfo, { id: peerId, udpPort: rinfo.port })
         this._send(rinfo, 'neighbours', {
           peers: this._dpt.getClosestPeers(info.data.id)
@@ -208,10 +296,58 @@ class Server extends EventEmitter {
         break
 
       case 'neighbours':
-        logNeighbors(`received ${info.typename} from ${rinfo.address}:${rinfo.port
-        } (peerId: ${peerId.toString('hex')})`)
+        logNeighbors(`received ${info.typename} from ${rinfo.address}:${
+          rinfo.port} (peerId: ${peerId.toString('hex')})`)
         this.emit('peers', info.data.peers.map(peer => peer.endpoint))
-        this.emit('neighbors', { peer: { address: rinfo.address, port: rinfo.port, id: peerId }, neighbors: info.data.peers })
+        this.emit('neighbors', {
+          peer: {
+            address: rinfo.address,
+            port: rinfo.port, id: peerId
+          },
+          neighbors: info.data.peers
+        })
+        break
+
+      case 'enrRequest':
+        this._checkBond(peer)
+        logENR(`received ${info.typename} from ${rinfo.address}:${rinfo.port
+          } (peerId: ${peerId.toString('hex')})`)
+        Object.assign(rinfo, { id: peerId, udpPort: rinfo.port })
+        const resp = {
+          hash: msg.slice(0, 32),
+          enr: {
+            privateKey: this._privateKey,
+            content: {
+              seq: this._enrSequence,
+              id: 'v4',
+              forkid: this._forkid
+            },
+            secp256k1: this._pubKey,
+            ip: this._endpoint.address,
+            udp: this._endpoint.udpPort,
+          }
+        }
+        this._send(rinfo, 'enrResponse', resp)
+        this.emit('enrRequest', {raw: msg, rinfo: rinfo, resp: resp })
+        break
+
+      case 'enrResponse':
+        logENR(`received ${info.typename} from ${rinfo.address}:${rinfo.port
+          } (peerId: ${peerId.toString('hex')})`)
+        this.emit('enrResponse', info.data )
+
+        var rkey = info.data.hash.toString('hex')
+        const enrReq = this._requests.get(rkey)
+        if (enrReq) {
+          this._requests.delete(rkey)
+          enrReq.deferred.resolve({
+            id: peerId,
+            address: enrReq.peer.address,
+            udpPort: enrReq.peer.udpPort,
+            tcpPort: enrReq.peer.tcpPort,
+            record: info.data.enr.record
+          })
+        }
         break
     }
   }

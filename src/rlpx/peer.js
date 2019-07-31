@@ -154,7 +154,7 @@ class Peer extends EventEmitter {
         const body = this._eciesSession.parseBody(data)
 
         // TODO: uncomment if you want tx:hostname:port details (debug)
-        // console.log(`Received body ${this._socket.remoteAddress}:${this._socket.remotePort} ${body.toString('hex')}`)
+        // debug(`Received body ${this._socket.remoteAddress}:${this._socket.remotePort} ${body.toString('hex')}`)
 
         this._state = 'Header'
         this._nextPacketSize = 32

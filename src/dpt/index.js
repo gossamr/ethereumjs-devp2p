@@ -37,7 +37,7 @@ class DPT extends EventEmitter {
     this._server.on('error', (err) => this.emit('error', err))
 
     const refreshInterval = options.refreshInterval || ms('60s')
-    this._refreshIntervalId = setInterval(() => this.refresh(), refreshInterval)
+    this._refreshIntervalId = setInterval(async () => await this.refresh(), refreshInterval)
   }
 
   bind (...args) {
@@ -78,7 +78,7 @@ class DPT extends EventEmitter {
     debug(`bootstrap with peer ${peer.address}:${peer.udpPort}`)
 
     peer = await this.addPeer(peer)
-    this._server.findneighbours(peer, this._id)
+    await this._server.findneighbours(peer, this._id)
   }
 
   async addPeer (obj) {
@@ -122,11 +122,11 @@ class DPT extends EventEmitter {
     this._kbucket.remove(obj)
   }
 
-  refresh () {
+  async refresh () {
     const peers = this.getPeers()
     debug(`call .refresh (${peers.length} peers in table)`)
 
-    for (let peer of peers) this._server.findneighbours(peer, randomBytes(64))
+    for (let peer of peers) await this._server.findneighbours(peer, randomBytes(64))
   }
 }
 

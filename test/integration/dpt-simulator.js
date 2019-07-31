@@ -129,7 +129,7 @@ test('DPT: simulate bootstrap', async (t) => {
   }
 
   for (let dpt of dpts) {
-    dpt.refresh()
+    await dpt.refresh()
     await delay(400)
   }
 

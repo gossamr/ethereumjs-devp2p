@@ -57,6 +57,13 @@ Run an example with:
 node -r babel-register ./examples/peer-communication.js
 ```
 
+To use as a module, after installing from your project root:
+```
+cd node_modules/ethereumjs-devp2p
+wget https://raw.githubusercontent.com/gossamr/ethereumjs-devp2p/master/.babelrc
+npm i
+```
+
 ## Distributed Peer Table (DPT) / Node Discovery
 
 Maintain/manage a list of peers, see [./src/dpt/](./src/dpt/), also
@@ -141,7 +148,7 @@ dpt.bootstrap(bootnode).catch((err) => console.error('Something went wrong!'))
 
 Distributed Peer Table. Manages a Kademlia DHT K-bucket (`Kbucket`) for storing peer information
 and a `BanList` for keeping a list of bad peers. `Server` implements the node discovery (`ping`,
-`pong`, `findNeighbours`).
+`pong`, `findNeighbours`, `enrRequest`).
 
 ##### `new DPT(privateKey, options)`
 
@@ -155,7 +162,7 @@ Creates new DPT object
 
 #### `dpt.bootstrap(peer)` (`async`)
 
-Uses a peer as new bootstrap peer and calls `findNeighbouts`.
+Uses a peer as new bootstrap peer and calls `findNeighbours`.
 
 - `peer` - Peer to be added, format `{ address: [ADDRESS], udpPort: [UDPPORT], tcpPort: [TCPPORT] }`.
 
