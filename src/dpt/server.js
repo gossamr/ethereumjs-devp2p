@@ -29,8 +29,8 @@ class Server extends EventEmitter {
     this._pubKey = secp256k1.publicKeyCreate(privateKey)
     this._enrSequence = Buffer.from('01', 'hex')
 
-    // Main net St. Petersburg. TODO update next fork
-    const forkid = (options.forkid) ? options.forkid : '668db0af'
+    // Main net Istanbul. TODO update next fork
+    const forkid = (options.forkid) ? options.forkid : '879d6e30'
     this._forkid = [ Buffer.from(forkid,'hex'), Buffer.from('') ]
 
     this._version = (options.version === '5') ? v5 : v4
