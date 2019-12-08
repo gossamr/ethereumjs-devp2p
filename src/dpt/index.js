@@ -78,7 +78,7 @@ class DPT extends EventEmitter {
     debug(`bootstrap with peer ${peer.address}:${peer.udpPort}`)
 
     peer = await this.addPeer(peer)
-    await this._server.findneighbours(peer, this._id)
+    await this._server.findNode(peer, this._id)
   }
 
   async addPeer (obj) {
@@ -126,7 +126,7 @@ class DPT extends EventEmitter {
     const peers = this.getPeers()
     debug(`call .refresh (${peers.length} peers in table)`)
 
-    for (let peer of peers) await this._server.findneighbours(peer, randomBytes(64))
+    for (let peer of peers) await this._server.findNode(peer, randomBytes(64))
   }
 }
 

@@ -37,11 +37,11 @@ test('pong packet with additional list elements and additional random data', (t)
   t.end()
 })
 
-test('findnode packet with additional list elements and additional random data', (t) => {
+test('findNode packet with additional list elements and additional random data', (t) => {
   const buffer = Buffer.from('c7c44041b9f7c7e41934417ebac9a8e1a4c6298f74553f2fcfdcae6ed6fe53163eb3d2b52e39fe91831b8a927bf4fc222c3902202027e5e9eb812195f95d20061ef5cd31d502e47ecb61183f74a504fe04c51e73df81f25c4d506b26db4517490103f84eb840ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd31387574077f301b421bc84df7266c44e9e6d569fc56be00812904767bf5ccd1fc7f8443b9a35582999983999999280dc62cc8255c73471e0a61da0c89acdc0e035e260add7fc0c04ad9ebf3919644c91cb247affc82b69bd2ca235c71eab8e49737c937a2c396', 'hex')
   const msg = message.decode(buffer)
 
-  t.same(msg.typename, 'findneighbors')
+  t.same(msg.typename, 'findNode')
   t.same(msg.publicKey, publicKey)
 
   t.end()

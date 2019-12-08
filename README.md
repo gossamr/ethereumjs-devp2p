@@ -148,21 +148,21 @@ dpt.bootstrap(bootnode).catch((err) => console.error('Something went wrong!'))
 
 Distributed Peer Table. Manages a Kademlia DHT K-bucket (`Kbucket`) for storing peer information
 and a `BanList` for keeping a list of bad peers. `Server` implements the node discovery (`ping`,
-`pong`, `findNeighbours`, `enrRequest`).
+`pong`, `findNode`, `enrRequest`).
 
 ##### `new DPT(privateKey, options)`
 
 Creates new DPT object
 
 - `privateKey` - Key for message encoding/signing.
-- `options.refreshInterval` - Interval in ms for refreshing (calling `findNeighbours`) the peer list (default: `60s`).
+- `options.refreshInterval` - Interval in ms for refreshing (calling `findNode`) the peer list (default: `60s`).
 - `options.createSocket` - A datagram (dgram) `createSocket` function, passed to `Server` (default: `dgram.createSocket.bind(null, 'udp4')`).
 - `options.timeout` - Timeout in ms for server `ping`, passed to `Server` (default: `10s`).
 - `options.endpoint` - Endpoint information to send with the server `ping`, passed to `Server` (default: `{ address: '0.0.0.0', udpPort: null, tcpPort: null }`).
 
 #### `dpt.bootstrap(peer)` (`async`)
 
-Uses a peer as new bootstrap peer and calls `findNeighbours`.
+Uses a peer as new bootstrap peer and calls `findNode`.
 
 - `peer` - Peer to be added, format `{ address: [ADDRESS], udpPort: [UDPPORT], tcpPort: [TCPPORT] }`.
 

@@ -12,7 +12,7 @@ const sleep = require('util').promisify(setTimeout);
 
 const debug = createDebugLogger('devp2p:dpt:server')
 const logPing = createDebugLogger('devp2p:dpt:server:ping')
-const logNeighbors = createDebugLogger('devp2p:dpt:server:neighbors')
+const logneighbors = createDebugLogger('devp2p:dpt:server:neighbors')
 const logENR = createDebugLogger('devp2p:dpt:server:enr')
 const logError = createDebugLogger('devp2p:dpt:server:error')
 const logBond = createDebugLogger('devp2p:dpt:server:bond')
@@ -131,11 +131,11 @@ class Server extends EventEmitter {
     return deferred.promise
   }
 
-  async findneighbours (peer, id) {
+  async findNode (peer, id) {
     this._isAliveCheck()
     await this._ensureBond(peer)
 
-    this._send(peer, 'findneighbours', { id })
+    this._send(peer, 'findNode', { id })
   }
 
   _isAliveCheck () {
@@ -285,18 +285,18 @@ class Server extends EventEmitter {
 
         break
 
-      case 'findneighbours':
+      case 'findNode':
         this._checkBond(peer)
-        logNeighbors(`received ${info.typename} from ${rinfo.address}:${
+        logneighbors(`received ${info.typename} from ${rinfo.address}:${
           rinfo.port} (peerId: ${peerId.toString('hex')})`)
         Object.assign(rinfo, { id: peerId, udpPort: rinfo.port })
-        this._send(rinfo, 'neighbours', {
+        this._send(rinfo, 'neighbors', {
           peers: this._dpt.getClosestPeers(info.data.id)
         })
         break
 
-      case 'neighbours':
-        logNeighbors(`received ${info.typename} from ${rinfo.address}:${
+      case 'neighbors':
+        logneighbors(`received ${info.typename} from ${rinfo.address}:${
           rinfo.port} (peerId: ${peerId.toString('hex')})`)
         this.emit('peers', info.data.peers.map(peer => peer.endpoint))
         this.emit('neighbors', {

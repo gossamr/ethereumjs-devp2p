@@ -227,7 +227,7 @@ const pong = {
   }
 }
 
-const findneighbors = {
+const findNode = {
   encode: function (obj) {
     return [obj.id, timestamp.encode(obj.timestamp)]
   },
@@ -286,13 +286,13 @@ const enrResponse = {
   }
 }
 
-const messages = { ping, pong, findneighbors, neighbors, enrRequest, enrResponse }
+const messages = { ping, pong, findNode, neighbors, enrRequest, enrResponse }
 
 const types = {
   byName: {
     ping: 0x01,
     pong: 0x02,
-    findneighbors: 0x03,
+    findNode: 0x03,
     neighbors: 0x04,
     enrRequest: 0x05,
     enrResponse: 0x06
@@ -300,7 +300,7 @@ const types = {
   byType: {
     0x01: 'ping',
     0x02: 'pong',
-    0x03: 'findneighbors',
+    0x03: 'findNode',
     0x04: 'neighbors',
     0x05: 'enrRequest',
     0x06: 'enrResponse'
