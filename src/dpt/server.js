@@ -133,9 +133,7 @@ class Server extends EventEmitter {
 
   async findNode (peer, id) {
     this._isAliveCheck()
-    await this._ensureBond(peer)
-
-    this._send(peer, 'findNode', { id })
+    await this._ensureBond(peer) ? this._send(peer, 'findNode', { id }) : null
   }
 
   _isAliveCheck () {
@@ -155,9 +153,15 @@ class Server extends EventEmitter {
     const lprkey = `${peer.id.toString('hex')}@${peer.address}:${peer.udpPort}`
     if (!this._lastPingReceived.get(lprkey)) {
       logBond(`Bonding with enode://${lprkey}`)
-      await this.ping(peer)
+      try {
+        await this.ping(peer)
+      } catch (err) {
+        // we already logged the error in the ping, so ignore it.
+        return false
+      }
       await sleep(ms('500ms')) // wait for ping back and pong process
     }
+    return true
   }
 
   async requestENR (obj) {
